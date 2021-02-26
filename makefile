@@ -7,8 +7,8 @@ CC = gcc
 CFLAGS = -g -Wall
 
 # The build target executables:
-P1_TARGET = tictactoeP1
-P2_TARGET = tictactoeP2
+P1_TARGET = tictactoeServer
+P2_TARGET = tictactoeClient
 TARGETS = $(P1_TARGET) $(P2_TARGET)
 
 # Process to build application
