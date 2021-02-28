@@ -1,4 +1,4 @@
-# TicTacToe Player 1 (server) Design
+# TicTacToe Server (Player 1) Design
 > This is the design document for the TicTacToe Server ([tictactoeP1.c](https://github.com/CSE-5462-Spring-2021/assigment4-conner-and-ben/blob/main/tictactoeP1.c)).  
 > By: Conner Graham
 
