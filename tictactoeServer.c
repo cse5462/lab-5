@@ -33,6 +33,10 @@
 #define ROWS 3
 /* The number of columns for the TicIacToe board. */
 #define COLUMNS 3
+/* TODO */
+#define P1_MARK 'X'
+/* TODO */
+#define P2_MARK 'O'
 
 /*******************/
 /* PLAYER COMMANDS */
@@ -42,29 +46,37 @@
 /* The command to issue a move. */
 #define MOVE 0x01
 
+/* Structure to TODO . */
+struct TTT_Game {
+    struct sockaddr_in p2Address;  // TODO
+    int player;
+    char board[ROWS*COLUMNS];       // TODO
+};
+
 /* Structure to send and recieve player datagrams. */
 struct Buffer {
     char version;   // version number
     char command;   // player command
     char data;      // data for command if applicable
+    char gameNum;   // TODO
 };
 
 void print_error(const char *msg, int errnum, int terminate);
 void handle_init_error(const char *msg, int errnum);
 void extract_args(char *argv[], int *port);
-void print_server_info(const struct sockaddr_in *serverAddr);
+void print_server_info(struct sockaddr_in serverAddr);
 int create_endpoint(struct sockaddr_in *socketAddr, unsigned long address, int port);
 void set_timeout(int sd, int seconds);
-int new_game(int sd, struct sockaddr_in *playerAddr);
-void init_shared_state(char board[ROWS][COLUMNS]);
-int check_win(char board[ROWS][COLUMNS]);
-void print_board(char board[ROWS][COLUMNS]);
-int validate_choice(int choice, char board[ROWS][COLUMNS]);
-int get_p1_choice();
+int new_game(int sd, struct TTT_Game *game);
+void init_shared_state(struct TTT_Game *game);
+int check_win(const struct TTT_Game *game);
+void print_board(const struct TTT_Game *game);
+int validate_choice(int choice, const struct TTT_Game *game);
+int get_p1_choice(struct TTT_Game *game);
 int get_p2_choice(int sd, const struct sockaddr_in *playerAddr);
 int send_p1_move(int sd, const struct sockaddr_in *playerAddr, int move);
-int get_player_choice(int sd, const struct sockaddr_in *playerAddr, char board[ROWS][COLUMNS], int player);
-void tictactoe(int sd, const struct sockaddr_in *playerAddr, char board[ROWS][COLUMNS]);
+int get_player_choice(int sd, struct TTT_Game *game);
+void tictactoe(int sd, struct TTT_Game *game);
 
 /**
  * @brief This program creates and sets up a TicTacToe server which acts as Player 1 in a
@@ -88,8 +100,8 @@ void tictactoe(int sd, const struct sockaddr_in *playerAddr, char board[ROWS][CO
  */
 int main(int argc, char *argv[]) {
     int sd, portNumber;
-    char board[ROWS][COLUMNS];
     struct sockaddr_in serverAddress;
+    struct TTT_Game game1 = {{0}};
 
     /* If arg count correct, extract arguments to their respective variables */
     if (argc != NUM_ARGS) handle_init_error("argc: Invalid number of command line arguments", 0);
@@ -97,22 +109,21 @@ int main(int argc, char *argv[]) {
 
     /* Create server socket and print server information */
     sd = create_endpoint(&serverAddress, INADDR_ANY, portNumber);
-    print_server_info(&serverAddress);
+    print_server_info(serverAddress);
 
     /* Play the TicTacToe game when a player asks for one */
     int newGame = 1;
     while (1) {
-        struct sockaddr_in clientAddress;
         if (newGame) printf("[+]Waiting for Player 2 to join...\n");
         /* Remove timout when waiting for new player */
         if (newGame) set_timeout(sd, 0);
         /* Wait for a player to issue "New Game" comamnd */
-        if ((newGame = new_game(sd, &clientAddress))) {
+        if ((newGame = new_game(sd, &game1))) {
             /* Set timout once player has started a new game */
             set_timeout(sd, TIMEOUT);
             /* Initialize the 'game' board and start the 'game' */
-            init_shared_state(board);
-            tictactoe(sd, &clientAddress, board);
+            init_shared_state(&game1);
+            tictactoe(sd, &game1);
             printf("[+]The game has ended.\n");
         }
     }
@@ -175,7 +186,7 @@ void extract_args(char *argv[], int *port) {
  * 
  * @param serverAddr The socket address structure for the server comminication endpoint.
  */
-void print_server_info(const struct sockaddr_in *serverAddr) {
+void print_server_info(const struct sockaddr_in serverAddr) {
     int hostname;
     char hostbuffer[BUFFER_SIZE], *IP_addr;
     struct hostent *host_entry;
@@ -191,7 +202,7 @@ void print_server_info(const struct sockaddr_in *serverAddr) {
     /* Convert the host internet network address to an ASCII string */
     IP_addr = inet_ntoa(*((struct in_addr *)host_entry->h_addr_list[0]));
     /* Print the IP address and port number for the server */
-    printf("Server listening at %s on port %hu\n", IP_addr, serverAddr->sin_port);
+    printf("Server listening at %s on port %hu\n", IP_addr, serverAddr.sin_port);
 }
 
 /**
@@ -247,22 +258,22 @@ void set_timeout(int sd, int seconds) {
  * "New Game" request.
  * 
  * @param sd The socket descriptor of the server comminication endpoint.
- * @param playerAddr 
+ * @param game TODO
  * @return True if a "New Game" request has been received, false otherwise. 
  */
-int new_game(int sd, struct sockaddr_in *playerAddr) {
+int new_game(int sd, struct TTT_Game *game) {
     int rv;
     struct Buffer recvBuffer = {0};
     socklen_t fromLength = sizeof(struct sockaddr);
 
     /* Receive message and address from another player */
-    if ((rv = recvfrom(sd, &recvBuffer, sizeof(recvBuffer), 0, (struct sockaddr *)playerAddr, &fromLength)) < 2) {
+    if ((rv = recvfrom(sd, &recvBuffer, sizeof(recvBuffer), 0, (struct sockaddr *)&game->p2Address, &fromLength)) < 2) {
         if (rv < 0) print_error("new_game", errno, 0);
         return 0;
     } else {
         /* Check if message if a vlid "New Game" request */
         if (recvBuffer.version == VERSION && recvBuffer.command == NEW_GAME) {
-            printf("Player 2 at address %s has requested a new game\n", inet_ntoa(playerAddr->sin_addr));
+            printf("Player 2 at address %s has requested a new game\n", inet_ntoa(game->p2Address.sin_addr));
             return 1;
         } else {
             return 0;
@@ -273,62 +284,71 @@ int new_game(int sd, struct sockaddr_in *playerAddr) {
 /**
  * @brief Initializes the starting state of the game board that both players start with.
  * 
- * @param board The array representing the current state of the game board.
+ * @param game TODO
  */
-void init_shared_state(char board[ROWS][COLUMNS]) {    
-    int i, j, count = 1;
+void init_shared_state(struct TTT_Game *game) {    
+    int i;
     printf("[+]Initializing shared game board.\n");
     /* Initializes the shared state (aka the board)  */
-    for (i = 0; i < 3; i++) {
-        for (j = 0; j < 3; j++) {
-            board[i][j] = count++ + '0';
-        }
+    for (i = 1; i <= sizeof(game->board); i++) {
+        game->board[i-1] = i + '0';
     }
 }
 
 /**
  * @brief Determines if someone has won the game yet or not.
  * 
- * @param board The array representing the current state of the game board.
+ * @param game TODO
  * @return The value 1 if a player has won the game, 0 it the game was a draw, and -1 if the
  * game is still going on. 
  */
-int check_win(char board[ROWS][COLUMNS]) {
-    /**************************************************************************/
-    /* Brute force check to see if someone won, or if there is a draw. Return */
-    /* a 0 or 1 if the game is 'over' or return -1 if game should go on       */
-    /**************************************************************************/
-    if (board[0][0] == board[0][1] && board[0][1] == board[0][2]) { // row matches
-        return 1;   // return of 1 mean someone won -> game over
-    } else if (board[1][0] == board[1][1] && board[1][1] == board[1][2]) { // row matches
-        return 1;     
-    } else if (board[2][0] == board[2][1] && board[2][1] == board[2][2]) { // row matches
-        return 1;     
-    } else if (board[0][0] == board[1][0] && board[1][0] == board[2][0]) { // column matches
-        return 1;    
-    } else if (board[0][1] == board[1][1] && board[1][1] == board[2][1]) { // column matches
-        return 1;  
-    } else if (board[0][2] == board[1][2] && board[1][2] == board[2][2]) { // column matches
-        return 1;
-    } else if (board[0][0] == board[1][1] && board[1][1] == board[2][2]) { // diagonal matches
-        return 1;    
-    } else if (board[2][0] == board[1][1] && board[1][1] == board[0][2]) { // diagonal matches
-        return 1;    
-    } else if (board[0][0] != '1' && board[0][1] != '2' && board[0][2] != '3' &&
-                board[1][0] != '4' && board[1][1] != '5' && board[1][2] != '6' && 
-                board[2][0] != '7' && board[2][1] != '8' && board[2][2] != '9') {   // draw
-        return 0;   // return of 0 means draw -> game over
+int check_win(const struct TTT_Game *game) {
+    const int score = 10;
+    /***********************************************************************/
+    /* Brute force check to see if someone won. Return a +/- score if the  */
+    /* game is 'over' or return 0 if game should go on.                    */
+    /***********************************************************************/
+    if (game->board[0] == game->board[1] && game->board[1] == game->board[2]) { // row matches
+        return (game->board[0] == P1_MARK) ? score : -score;
+    } else if (game->board[3] == game->board[4] && game->board[4] == game->board[5]) { // row matches
+        return (game->board[3] == P1_MARK) ? score : -score;
+    } else if (game->board[6] == game->board[7] && game->board[7] == game->board[8]) { // row matches
+        return (game->board[6] == P1_MARK) ? score : -score;
+    } else if (game->board[0] == game->board[3] && game->board[3] == game->board[6]) { // column matches
+        return (game->board[0] == P1_MARK) ? score : -score;
+    } else if (game->board[1] == game->board[4] && game->board[4] == game->board[7]) { // column matches
+        return (game->board[1] == P1_MARK) ? score : -score;
+    } else if (game->board[2] == game->board[5] && game->board[5] == game->board[8]) { // column matches
+        return (game->board[2] == P1_MARK) ? score : -score;
+    } else if (game->board[0] == game->board[4] && game->board[4] == game->board[8]) { // diagonal matches
+        return (game->board[0] == P1_MARK) ? score : -score;
+    } else if (game->board[2] == game->board[4] && game->board[4] == game->board[6]) { // diagonal matches
+        return (game->board[2] == P1_MARK) ? score : -score;
     } else {
-        return -1;  // return of -1 means keep playing
+        return 0;  // return of 0 means keep playing
     }
+}
+
+/**
+ * @brief TODO
+ * 
+ * @param game TODO
+ * @return TODO
+ */
+int check_draw(const struct TTT_Game *game) {
+    int i;
+    for (i = 0; i < sizeof(game->board); i++) {
+        if (game->board[i] == (i+1)+'0') return 0;
+    }
+    return 1;
 }
 
 /**
  * @brief Prints out the current state of the game board nicely formatted.
  * 
- * @param board The array representing the current state of the game board.
+ * @param game TODO
  */
-void print_board(char board[ROWS][COLUMNS]) {
+void print_board(const struct TTT_Game *game) {
     /*****************************************************************/
     /* Brute force print out the board and all the squares/values    */
     /*****************************************************************/
@@ -337,13 +357,13 @@ void print_board(char board[ROWS][COLUMNS]) {
     printf("Player 1 (X)  -  Player 2 (O)\n\n\n");
     /* Print current state of board */
     printf("     |     |     \n");
-    printf("  %c  |  %c  |  %c \n", board[0][0], board[0][1], board[0][2]);
+    printf("  %c  |  %c  |  %c \n", game->board[0], game->board[1], game->board[2]);
     printf("_____|_____|_____\n");
     printf("     |     |     \n");
-    printf("  %c  |  %c  |  %c \n", board[1][0], board[1][1], board[1][2]);
+    printf("  %c  |  %c  |  %c \n", game->board[3], game->board[4], game->board[5]);
     printf("_____|_____|_____\n");
     printf("     |     |     \n");
-    printf("  %c  |  %c  |  %c \n", board[2][0], board[2][1], board[2][2]);
+    printf("  %c  |  %c  |  %c \n", game->board[6], game->board[7], game->board[8]);
     printf("     |     |     \n\n");
 }
 
@@ -352,11 +372,10 @@ void print_board(char board[ROWS][COLUMNS]) {
  * already been played) for the current game.
  * 
  * @param choice The player move to be validated.
- * @param board The array representing the current state of the game board.
+ * @param game TODO
  * @return True if the given move if valid based on the current board, false otherwise. 
  */
-int validate_choice(int choice, char board[ROWS][COLUMNS]) {
-    int row, column;
+int validate_choice(int choice, const struct TTT_Game *game) {
     /* Check to see if the choice is a move on the board */
     if (choice < 1 || choice > 9) {
         print_error("Invalid move: Must be a number [1-9]", 0, 0);
@@ -364,9 +383,7 @@ int validate_choice(int choice, char board[ROWS][COLUMNS]) {
     }
     /* Check to see if the row/column chosen has a digit in it, if */
     /* square 8 has an '8' then it is a valid choice */
-    row = (int)((choice-1) / ROWS); 
-    column = (choice-1) % COLUMNS;
-    if (board[row][column] != (choice + '0')) {
+    if (game->board[choice-1] != (choice + '0')) {
         print_error("Invalid move: Square already taken", 0, 0);
         return 0;
     }
@@ -374,18 +391,79 @@ int validate_choice(int choice, char board[ROWS][COLUMNS]) {
 }
 
 /**
+ * @brief TODO
+ * 
+ * @param game 
+ * @param depth 
+ * @param isMax 
+ * @return TODO
+ */
+int minimax(struct TTT_Game *game, int depth, int isMax) {
+    int score = check_win(game);
+    if (score > 0) {
+        return score - depth;
+    } else if (score < 0) {
+        return score + depth;
+    } else if (check_draw(game)) {
+        return 0;
+    } else {
+        int i, best = (isMax) ? INT32_MIN : INT16_MAX;
+        if (isMax) {
+            for (i = 0; i < sizeof(game->board); i++) {
+                if (game->board[i] == (i+1)+'0') {
+                    int value;
+                    game->board[i] = P1_MARK;
+                    if ((value = minimax(game, depth+1, !isMax)) > best) best = value;
+                    game->board[i] = (i+1)+'0';
+                }
+            }
+            return best;
+        } else {
+            for (i = 0; i < sizeof(game->board); i++) {
+                if (game->board[i] == (i+1)+'0') {
+                    int value;
+                    game->board[i] = P2_MARK;
+                    if ((value = minimax(game, depth+1, !isMax)) < best) best = value;
+                    game->board[i] = (i+1)+'0';
+                }
+            }
+            return best;
+        }
+    }
+}
+
+/**
+ * @brief TODO
+ * 
+ * @param game 
+ * @return TODO 
+ */
+int find_best_move(struct TTT_Game *game) {
+    int i, bestMove = -1, bestValue = INT32_MIN;
+    for (i = 0; i < sizeof(game->board); i++) {
+        if (game->board[i] == (i+1)+'0') {
+            int moveValue;
+            game->board[i] = P1_MARK;
+            moveValue = minimax(game, 0, 0);
+            game->board[i] = (i+1)+'0';
+            if (moveValue > bestValue) {
+                bestValue = moveValue;
+                bestMove = i+1;
+            }
+        }
+    }
+    return bestMove;
+}
+
+/**
  * @brief Gets Player 1's next move.
  * 
+ * @param game TODO
  * @return The integer for the square that Player 1 would like to move to. 
  */
-int get_p1_choice() {
-    int pick = 0;
-    char input[BUFFER_SIZE];
-    printf("Player 1, enter a number:  ");
-    /* Read line of user input */
-    fgets(input, sizeof(input), stdin);
-    /* Look for integer in input for player's move */
-    sscanf(input, "%d", &pick);
+int get_p1_choice(struct TTT_Game *game) {
+    int pick = find_best_move(game);
+    printf("Player 1 chose:  %d\n", pick);
     return pick;
 }
 
@@ -458,27 +536,25 @@ int send_p1_move(int sd, const struct sockaddr_in *playerAddr, int move) {
  * it also send this choice to the other player.
  * 
  * @param sd The socket descriptor of the server comminication endpoint.
- * @param playerAddr The socket address structure for the remote player comminication endpoint.
- * @param board The array representing the current state of the game board.
- * @param player The value indicating which player's turn it is.
+ * @param game TODO
  * @return The valid choice received from either Player 1 or 2, or -1 if an invalid
  * move was recieved from Player 2.
  */
-int get_player_choice(int sd, const struct sockaddr_in *playerAddr, char board[ROWS][COLUMNS], int player) {
+int get_player_choice(int sd, struct TTT_Game *game) {
     /* Get the player's move */
-    int choice = (player == 1) ? get_p1_choice() : get_p2_choice(sd, playerAddr);
+    int choice = (game->player == 1) ? get_p1_choice(game) : get_p2_choice(sd, &game->p2Address);
     /* Attempt to validate move; reprompt if Player 1, otherwise return error */
-    if (player == 2 && choice == ERROR_CODE) return ERROR_CODE;
-    while (!validate_choice(choice, board)) {
-        if (player == 1) {
-            choice = get_p1_choice(sd);
+    if (game->player == 2 && choice == ERROR_CODE) return ERROR_CODE;
+    while (!validate_choice(choice, game)) {
+        if (game->player == 1) {
+            choice = get_p1_choice(game);
         } else {
             return ERROR_CODE;
         }
     }
     /* If Player 1, we need to send the move to the other player */
-    if (player == 1) {
-        if (send_p1_move(sd, playerAddr, choice) < 0) return ERROR_CODE;
+    if (game->player == 1) {
+        if (send_p1_move(sd, &game->p2Address, choice) < 0) return ERROR_CODE;
     }
     return choice;
 }
@@ -488,50 +564,43 @@ int get_player_choice(int sd, const struct sockaddr_in *playerAddr, char board[R
  * there is a draw, or the remote player leaves the game.
  * 
  * @param sd The socket descriptor of the server comminication endpoint.
- * @param playerAddr The socket address structure for the remote player comminication endpoint.
- * @param board The array representing the current state of the game board.
+ * @param game TODO
  */
-void tictactoe(int sd, const struct sockaddr_in *playerAddr, char board[ROWS][COLUMNS]) {
+void tictactoe(int sd, struct TTT_Game *game) {
     /***************************************************************************/
     /* This is the meat of the game, you'll look here for how to change it up. */
     /***************************************************************************/
-    int player = 1;     // keep track of whose turn it is
     int result, choice; // used for keeping track of choice user makes
-    int row, column;
-    char mark;          // either an 'X' or an 'O'
+    game->player = 1;     // keep track of whose turn it is
 
     /* Loop, first print the board, then ask the current player to make a move */
     do {
         /* Print the board on the screen */
-        print_board(board);
+        print_board(game);
         /* Get the player's move */
-        if ((choice = get_player_choice(sd, playerAddr, board, player)) < 0) return;
-        /* Depending on who the player is, use either X or O */
-        mark = (player == 1) ? 'X' : 'O';
+        if ((choice = get_player_choice(sd, game)) < 0) return;
         
         /******************************************************************/
         /* A little math here. You know the squares are numbered 1-9, but */
         /* the program is using 3 rows and 3 columns. We have to do some  */
         /* simple math to convert a 1-9 to the right row/column.          */
         /******************************************************************/
-        row = (int)((choice-1) / ROWS); 
-        column = (choice-1) % COLUMNS;
         /* Make the move the player chose */
-        board[row][column] = mark;
+        game->board[choice-1] = (game->player == 1) ? P1_MARK : P2_MARK;
 
         /* After a move, check to see if someone won! (or if there is a draw) */
-        if ((result = check_win(board)) == -1) {
+        if ((result = check_win(game)) == 0 && !check_draw(game)) {
             /* If not, change to other player's turn */
-            player = (player == 1) ? 2 : 1;
+            game->player = (game->player == 1) ? 2 : 1;
         }
-    } while (result == -1); // -1 means the game is still going 
+    } while (result == 0 && !check_draw(game)); // -1 means the game is still going 
     
     /* Print out the final board */
-    print_board(board);
+    print_board(game);
     
     /* Check end result of the game */
-    if (result == 1) {  // means a player won!! congratulate them
-        printf("==>\a Player %d wins\n", player);
+    if (result != 0) {  // means a player won!! congratulate them
+        printf("==>\a Player %d wins\n", game->player);
     } else {
         printf("==>\a It's a draw\n");   // ran out of squares, it is a draw
     }
