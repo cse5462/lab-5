@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
+#include <time.h>
 #include <string.h>
 #include <strings.h>
 #include <netdb.h>
@@ -44,6 +45,7 @@
 /* Structure to TODO . */
 struct TTT_Game {
     int gameNum;                    // TODO
+    double timeout;                 // TODO
     struct sockaddr_in p2Address;   // TODO
     int player;                     // TODO
     char board[ROWS*COLUMNS];       // TODO
@@ -441,20 +443,36 @@ int find_open_game(struct TTT_Game roster[MAX_GAMES]) {
     return gameIndex;
 }
 
+int games_in_progress(struct TTT_Game roster[MAX_GAMES]) {
+    int i, count = 0;
+    for (i = 0; i < MAX_GAMES; i++) {
+        if (roster[i].player != 0) count++;
+    }
+    return count;
+}
+
 int get_command(int sd, struct sockaddr_in *playerAddr, struct Buffer *datagram) {
     int rv;
     socklen_t fromLength = sizeof(struct sockaddr_in);
     if ((rv = recvfrom(sd, datagram, sizeof(struct Buffer), 0, (struct sockaddr *)playerAddr, &fromLength)) <= 0) {
-        print_error("get_command", errno, 0);
+        if (rv == 0) {
+            print_error("get_command: Received empty datagram. Datagram discarded", 0, 0);
+        } else {
+            if (errno == EAGAIN || errno == EWOULDBLOCK){
+                return 0;
+            } else {
+                print_error("get_command", errno, 0);
+            }
+        }
         return ERROR_CODE;
     } else if (datagram->version != VERSION) {
-        print_error("get_command: Protocol version not supported. Datagram discarded.", 0, 0);
+        print_error("get_command: Protocol version not supported. Datagram discarded", 0, 0);
         return ERROR_CODE;
     } else if (datagram->command < NEW_GAME || datagram->command > MOVE) {
-        print_error("get_command: Invalid command. Datagram discarded.", 0, 0);
+        print_error("get_command: Invalid command. Datagram discarded", 0, 0);
         return ERROR_CODE;
     } else if (datagram->command != NEW_GAME && (datagram->gameNum < 1 || datagram->gameNum > MAX_GAMES)) {
-        print_error("get_command: Invalid game number. Datagram discarded.", 0, 0);
+        print_error("get_command: Invalid game number. Datagram discarded", 0, 0);
         return ERROR_CODE;
     }
     return rv;
@@ -477,8 +495,12 @@ void init_game_roster(struct TTT_Game roster[MAX_GAMES]) {
     int i;
     printf("[+]Initializing shared game states.\n");
     for (i = 0;  i < MAX_GAMES; i++) {
-        init_shared_state(&roster[i]);
+        struct sockaddr_in blankAddr = {0};
+        roster[i].timeout = TIMEOUT;
+        roster[i].p2Address = blankAddr;
         roster[i].gameNum = i+1;
+        roster[i].player = 0;
+        init_shared_state(&roster[i]);
     }
 }
 
@@ -506,7 +528,7 @@ void new_game(int sd, const struct sockaddr_in *playerAddr, const struct Buffer 
         game->player = 2;
         print_board(game);
     } else {
-        print_error("new_game: Unable to find an open game.", 0, 0);
+        print_error("new_game: Unable to find an open game", 0, 0);
     }
 }
 
@@ -561,17 +583,29 @@ void move(int sd, const struct sockaddr_in *playerAddr, const struct Buffer *dat
             free_game(game);
         }
     } else {
-        print_error("move: Player address does not match that registered to game.", 0, 0);
+        print_error("move: Player address does not match that registered to game", 0, 0);
         printf("Game address: %s (port %d)\n", inet_ntoa(game->p2Address.sin_addr), game->p2Address.sin_port);
     }
 }
 
 void free_game(struct TTT_Game *game) {
     struct sockaddr_in blankAddr = {0};
-    printf("Game over. Resetting game for new player.\n");
+    printf("Game #%d has ended. Resetting game for new player.\n", game->gameNum);
+    game->timeout = TIMEOUT;
     game->p2Address = blankAddr;
     game->player = 0;
     init_shared_state(game);
+}
+
+void check_timeout(struct TTT_Game roster[MAX_GAMES]) {
+    int i;
+    for (i = 0; i < MAX_GAMES; i++) {
+        if (roster[i].timeout <= 0) {
+            printf("[+]Game #%d has timed out.\n", roster[i].gameNum);
+            printf("Player at %s (port %d) ran out of time to respond.\n", inet_ntoa(roster[i].p2Address.sin_addr), roster[i].p2Address.sin_port);
+            free_game(&roster[i]);
+        }
+    }
 }
 
 /**
@@ -581,18 +615,38 @@ void free_game(struct TTT_Game *game) {
  * @param sd The socket descriptor of the server comminication endpoint.
  */
 void tictactoe(int sd) {
+    int waitPrompt = 1;
     struct TTT_Game gameRoster[MAX_GAMES] = {{0}};
     init_game_roster(gameRoster);
 
+    set_timeout(sd, TIMEOUT);
     while (1) {
+        int rv = ERROR_CODE;
+        time_t start, stop;
         struct sockaddr_in playerAddr = {0};
         struct Buffer datagram = {0};
         command_handler commands[] = {new_game, move};
 
-        printf("[+]Waiting for another player to issue a command...\n");
-        if (get_command(sd, &playerAddr, &datagram) > 0) {
-            int gameIndx = (datagram.command == NEW_GAME) ? find_open_game(gameRoster) : datagram.gameNum-1;
+        if (waitPrompt) printf("[+]Waiting for another player to issue a command...\n");
+        start = time(NULL);
+        if ((rv = get_command(sd, &playerAddr, &datagram)) > 0) {
+            int i, gameIndx = (datagram.command == NEW_GAME) ? find_open_game(gameRoster) : datagram.gameNum-1;
             commands[(int)datagram.command](sd, &playerAddr, &datagram, (gameIndx < 0) ? NULL : &gameRoster[gameIndx]);
+            stop = time(NULL);
+            for (i = 0; i < MAX_GAMES; i++) {
+                if (gameRoster[i].player != 0) gameRoster[i].timeout -= difftime(stop, start);
+                if (i == gameIndx) gameRoster[gameIndx].timeout = TIMEOUT;
+            }
+            check_timeout(gameRoster);
+            waitPrompt = 1;
+        } else if (rv == 0) {
+            if (games_in_progress(gameRoster) > 0) {
+                print_error("tictactoe: Nobody has responded in a while. Resetting game states", 0, 0);
+                init_game_roster(gameRoster);
+                waitPrompt = 1;
+            } else {
+                waitPrompt = 0;
+            }
         }
     }
 }
