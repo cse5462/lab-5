@@ -26,6 +26,7 @@
        char version;
        char move;
        char place;
+       char gameNumber;
         
     };
 int checkwin(char board[ROWS][COLUMNS]);
@@ -47,7 +48,7 @@ int main(int argc, char *argv[])
     if (argc != 3)
     {
         printf("Wrong number of command line arguments");
-        printf("Input is as follows: tictactoeP2 <ip-address> <port-num>");
+        printf("Input is as follows: tictactoeP2 <port-num> <ip-address>");
         exit(1);
     }
     // create the socket
@@ -61,15 +62,15 @@ int main(int argc, char *argv[])
     {
         printf("Socket Created\n");
     }
-    portNumber = strtol(argv[2], NULL, 10);
-    strcpy(serverIP, argv[1]);
+    portNumber = strtol(argv[1], NULL, 10);
+    strcpy(serverIP, argv[2]);
     server_address.sin_family = AF_INET;
     server_address.sin_port = htons(portNumber);
     server_address.sin_addr.s_addr = inet_addr(serverIP);
     // connnect to the sever
    
     socklen_t fromLength=sizeof(struct sockaddr);
-    Buffer.version=2;
+    Buffer.version=3;
     Buffer.move=0;
     if(sendto(sd,&Buffer,sizeof(Buffer),0,(struct sockaddr*)&server_address,fromLength)<0)
     {
@@ -92,6 +93,7 @@ int tictactoe(char board[ROWS][COLUMNS], int sd,struct sockaddr_in *serverAdd)
     int row, column;
     char mark, pick; // either an 'x' or an 'o'
     int input;
+    char gameNumber;
    struct buffer player2,player1={0};
     /* loop, first print the board, then ask player 'n' to make a move */
 
@@ -116,9 +118,10 @@ int tictactoe(char board[ROWS][COLUMNS], int sd,struct sockaddr_in *serverAdd)
                 while(getchar()!='\n');
             }
             pick = input + '0';
-            player2.version=2;
+            player2.version=3;
             player2.move=1;
             player2.place=pick;
+            player2.gameNumber=gameNumber;
         }
         else
         {
@@ -135,7 +138,7 @@ int tictactoe(char board[ROWS][COLUMNS], int sd,struct sockaddr_in *serverAdd)
     }
             rc =recvfrom(sd,&player1,sizeof(player1),0,(struct sockaddr *)serverAdd,&fromLength);
             pick=player1.place;
-            
+            gameNumber=player1.gameNumber;
             // checks to see if the connection was cut mid stream
             if (rc <= 0)
             {
@@ -148,7 +151,7 @@ int tictactoe(char board[ROWS][COLUMNS], int sd,struct sockaddr_in *serverAdd)
                 printf("Closing connection!\n");
                 exit(1);
             }
-            if(player1.move==0|| player1.version!=2){
+            if(player1.move==0|| player1.version!=3){
                 printf("Player 1 sent invalid datagram\n");
                 printf("Closing connection!\n");
                 exit(1);
