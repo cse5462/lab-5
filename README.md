@@ -86,7 +86,7 @@ If any of the argument strings contain whitespace, those
 arguments will need to be enclosed in quotes.
 
 ### ASSUMPTIONS <a name="assumptions-p2"></a>
-- Client send and recieves a 3 byte datagram(excluding the inital datagram which is 2 bytes)
+- Client send and recieves a 40 byte datagram(excluding the inital datagram which is 2 bytes)
 - A datagram is sent and recevied 
 - The spaces on the tictactoe board are 1-9
 - Player 1 is the "server": they are the one who calls bind()   
