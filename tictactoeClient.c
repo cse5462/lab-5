@@ -94,6 +94,7 @@ int tictactoe(char board[ROWS][COLUMNS], int sd,struct sockaddr_in *serverAdd)
     char mark, pick; // either an 'x' or an 'o'
     int input;
     char gameNumber;
+    int x=0;
    struct buffer player2,player1={0};
     /* loop, first print the board, then ask player 'n' to make a move */
 
@@ -138,7 +139,10 @@ int tictactoe(char board[ROWS][COLUMNS], int sd,struct sockaddr_in *serverAdd)
     }
             rc =recvfrom(sd,&player1,sizeof(player1),0,(struct sockaddr *)serverAdd,&fromLength);
             pick=player1.place;
+            if(x==0){
             gameNumber=player1.gameNumber;
+            x++;
+            }
             // checks to see if the connection was cut mid stream
             if (rc <= 0)
             {
@@ -151,7 +155,7 @@ int tictactoe(char board[ROWS][COLUMNS], int sd,struct sockaddr_in *serverAdd)
                 printf("Closing connection!\n");
                 exit(1);
             }
-            if(player1.move==0|| player1.version!=3){
+            if(player1.move==0|| player1.version!=3|| gameNumber!=player1.gameNumber){
                 printf("Player 1 sent invalid datagram\n");
                 printf("Closing connection!\n");
                 exit(1);
