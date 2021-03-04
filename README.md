@@ -79,7 +79,7 @@ follows:
 ### USAGE <a name="usage-p2"></a>
 Start the TicTacToe P2 Client with the command...
 ```sh
-$ tictactoeP2 <remote-IP> <local-port>
+$ tictactoeClient  <local-port> <remote-IP>
 ```
 
 If any of the argument strings contain whitespace, those
