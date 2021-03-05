@@ -103,7 +103,7 @@ void print_board(const struct TTT_Game *game);
 int validate_move(int choice, const struct TTT_Game *game);
 int send_p1_move(int sd, struct TTT_Game *game);
 void free_game(struct TTT_Game *game);
-int game_over(struct TTT_Game *game);
+int check_game_over(struct TTT_Game *game);
 void tictactoe(int sd);
 
 /**
@@ -172,7 +172,7 @@ void print_error(const char *msg, int errnum, int terminate) {
  */
 void handle_init_error(const char *msg, int errnum) {
     print_error(msg, errnum, 0);
-    printf("Usage is: tictactoeP1 <remote-port>\n");
+    printf("Usage is: tictactoeServer <remote-port>\n");
     /* Exits the process signaling unsuccessful termination */
     exit(EXIT_FAILURE);
 }
@@ -464,7 +464,7 @@ void move(int sd, const struct sockaddr_in *playerAddr, const struct Buffer *dat
         if (validate_move(move, game)) {
             /* Update the board (for Player 2) and check if someone won */
             game->board[move-1] = P2_MARK;
-            if (game_over(game)) return;
+            if (check_game_over(game)) return;
             /* If nobody won, change turns and make a move to send to the remote player */
             game->player = 1;
             if ((move = send_p1_move(sd, game)) == ERROR_CODE) {
@@ -473,7 +473,7 @@ void move(int sd, const struct sockaddr_in *playerAddr, const struct Buffer *dat
             }
             /* Update the board (for Player 1) and check if someone won */
             game->board[move-1] = P1_MARK;
-            if (game_over(game)) return;
+            if (check_game_over(game)) return;
             /* If nobody won, change turns and print the board after the exchange */
             game->player = 2;
             print_board(game);
@@ -717,7 +717,7 @@ void free_game(struct TTT_Game *game) {
  * @param game The current game of TicTacToe being played.
  * @return True if the game has ended, false otherwise. 
  */
-int game_over(struct TTT_Game *game) {
+int check_game_over(struct TTT_Game *game) {
     /* Check if somebody won the game */
     if (check_win(game) != 0) {
         /* Print final game board and winning player */
