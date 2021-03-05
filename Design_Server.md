@@ -17,7 +17,7 @@ NUM_ARGS = 2        // number of command line arguments
 TIMEOUT = TBD       // number of seconds spent waiting before a timeout
 ROWS = 3            // number of rows for the TicIacToe board
 COLUMNS = 3         // number of columns for the TicIacToe board
-MAX_GAMES = 10      // maximum number of games that can be played simultaneously
+MAX_GAMES = TBD     // maximum number of games that can be played simultaneously
 P1_MARK = TBD       // baord marker used for Player 1
 P2_MARK = TBD       // baord marker used for Player 2
 
