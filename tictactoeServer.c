@@ -371,8 +371,8 @@ int find_open_game(struct TTT_Game roster[MAX_GAMES]) {
 }
 
 /**
- * @brief Gets a command from the remote player and attempts to validate the syntax based on
- * the current protocol.
+ * @brief Gets a command from the remote player and attempts to validate the data and syntax
+ * based on the current protocol.
  * 
  * @param sd The socket descriptor of the server comminication endpoint.
  * @param playerAddr The address of the remote player.
@@ -433,7 +433,7 @@ void new_game(int sd, const struct sockaddr_in *playerAddr, const struct Buffer 
             free_game(game);
             return;
         }
-        /* Update and print game board */
+        /* Update and print game board, and change turns */
         game->board[move-1] = P1_MARK;
         game->player = 2;
         print_board(game);
@@ -444,8 +444,8 @@ void new_game(int sd, const struct sockaddr_in *playerAddr, const struct Buffer 
 
 /**
  * @brief Handles the MOVE command from the remote player. Receives and processes a move
- * from the remote player sends a move back. If the game has ended from a move, an appropriate
- * message is printed and the game is reset for a new player.
+ * from the remote player and sends a move back. If the game has ended from a move, an
+ * appropriate message is printed and the game is reset for a new player.
  * 
  * @param sd The socket descriptor of the server comminication endpoint.
  * @param playerAddr The address of the remote player.
@@ -746,7 +746,7 @@ void tictactoe(int sd) {
     struct TTT_Game gameRoster[MAX_GAMES] = {{0}};
     command_handler commands[] = {new_game, move};
 
-    /* Initialize all game and server timeout time */
+    /* Initialize all games and server timeout time */
     init_game_roster(gameRoster);
     set_timeout(sd, TIMEOUT);
     /* Play all the games */
