@@ -98,7 +98,20 @@ responds to the server for a period of time, the server times out and all ongoin
 reset for other players to play.
 ```C
 void tictactoe(params...) {
-    TODO
+    /* initialize all games */
+    /* set server timeout time */
+    while (TRUE) {
+        get_command(params...);
+        if (!error) {
+            /* retrieve appropriate game */
+            /* process command */
+            /* update timeout clock for each ongoing game */
+            /* reset any game that has timed out */
+        } else if (error == timeout) {    // server timeout
+            /* check if any games are currently being played */
+            if (games open) /* reset all games */;
+        }
+    }
 }
 ```
 - Gets a command from the remote player and attempts to validate the data and syntax based on
