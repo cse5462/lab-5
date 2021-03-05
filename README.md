@@ -53,7 +53,7 @@ correctly invoke the program.
 ### USAGE <a name="usage-server"></a>
 Start the TicTacToe P1 Server with the command...
 ```sh
-$ tictactoeP1 <local-port>
+$ tictactoeServer <local-port>
 ```
 
 If any of the argument strings contain whitespace, those
