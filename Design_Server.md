@@ -1,25 +1,51 @@
 # TicTacToe Server (Player 1) Design
-> This is the design document for the TicTacToe Server ([tictactoeP1.c](https://github.com/CSE-5462-Spring-2021/assigment4-conner-and-ben/blob/main/tictactoeP1.c)).  
+> This is the design document for the TicTacToe Server ([tictactoeServer.c](https://github.com/CSE-5462-Spring-2021/assignment5-conner-ben/blob/main/tictactoeServer.c)).  
 > By: Conner Graham
 
 ## Table of Contents
-- TicTacToe Class Protocol - [Protocol Document](https://docs.google.com/document/d/1Cl-n4nrhrzsqrl4gDFqdTwUC35rcNlwehRR58VY7k6c/edit?usp=sharing)
+- TicTacToe Class Protocol - [Protocol Document](https://docs.google.com/document/d/1wq3D-pyuyNu0O_81yzq8HaUqDNXmpJbGD7M6_t26xgg/edit?usp=sharing)
 - [Environment Constants](#environment-constants)
+- [Defined Structures](#defined-structures)
 - [High-Level Architecture](#high-level-architecture)
 - [Low-Level Architecturet](#low-level-architecture)
 
 ## Environment Constants
 ```C#
-VERSION = 2       // protocol version number
+VERSION = 3         // protocol version number
 
-NUM_ARGS = 2      // number of command line arguments
-TIMEOUT = TBD     // number of seconds spent waiting before a timeout
-ROWS = 3          // number of rows for the TicIacToe board
-COLUMNS = 3       // number of columns for the TicIacToe board
+NUM_ARGS = 2        // number of command line arguments
+TIMEOUT = TBD       // number of seconds spent waiting before a timeout
+ROWS = 3            // number of rows for the TicIacToe board
+COLUMNS = 3         // number of columns for the TicIacToe board
+MAX_GAMES = 10      // maximum number of games that can be played simultaneously
+P1_MARK = TBD       // baord marker used for Player 1
+P2_MARK = TBD       // baord marker used for Player 2
+
 
 // COMMANDS
-NEW_GAME = 0x00   // command to begin a new game
-MOVE = 0x01       // command to issue a move
+NEW_GAME = 0x00     // command to begin a new game
+MOVE = 0x01         // command to issue a move
+```
+
+## Defined Structures
+Structure for each TicTacToe game.
+```C
+struct TTT_Game {
+    int gameNum;                    // game number
+    double timeout;                 // amount of time before game timeout
+    struct sockaddr_in p2Address;   // address of remote player for game
+    int player;                     // current player's turn
+    char board[ROWS*COLUMNS];       // TicTacToe game board state
+};
+```
+Structure to send and recieve player datagrams.
+```C
+struct Buffer {
+    char version;   // version number
+    char command;   // player command
+    char data;      // data for command if applicable
+    char gameNum;   // game number
+};
 ```
 
 ## High-Level Architecture
