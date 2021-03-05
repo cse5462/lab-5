@@ -21,7 +21,6 @@ MAX_GAMES = 10      // maximum number of games that can be played simultaneously
 P1_MARK = TBD       // baord marker used for Player 1
 P2_MARK = TBD       // baord marker used for Player 2
 
-
 // COMMANDS
 NEW_GAME = 0x00     // command to begin a new game
 MOVE = 0x01         // command to issue a move
@@ -51,27 +50,16 @@ struct Buffer {
 ## High-Level Architecture
 At a high level, the server application attempts to validate and extract the arguments passed
 to the application. It then attempts to create and bind the server endpoint. If everything was
-successful, it then starts looking for clients issuing a "New Game" request. If another player
-requests a game, the server initializes the game board and begins the TicTacToe game. After
-the game is over, the server then starts looking for other players issuing "New Game" requests.
-If an error occurs before the connection is established, the program terminates and prints
-appropriate error messages, otherwise an error message is printed and the connection is terminated.
+successful, the TicTacToe server is started. If an error occurs before the server is started,
+the program terminates and prints appropriate error messages, otherwise an error message is
+printed and the server continues.
 ```C
 int main(int argc, char *argv[]) {
     /* check that the arg count is correct */
     if (!correct) exit(EXIT_FAILURE);
     extract_args(params...);
     create_endpoint(params...);
-    /* wait for "New Game" request */
-    /* infinite loop waiting for a player to make game request  */
-    if (new_game) {
-        /* set recv TIMEOUT */
-        init_shared_state(params...);   // initialize game board
-        tictactoe(params...);   // start TicTacToe game
-        /* end game and look for another "New Game" request */
-    } else {
-        exit(EXIT_FAILURE);
-    }
+    tictactoe(params...);
     return 0;
 }
 ```
@@ -102,93 +90,103 @@ int create_endpoint(params...) {
     return socket-descriptor;
 }
 ```
-Recieves a datagram from another player and checks to see if it is a valid "New Game"
-request.
-```C
-int new_game(params...) {
-    /* receive datagram from remote player */
-    if (!error) {
-        /* check for valid "New Game" request */
-        if (valid) {
-            return TRUE;
-        } else {
-            return FALSE;
-        }
-    } else {
-        return FALSE;
-    }
-    return socket-descriptor;
-}
-```
-Plays a simple game of TicTacToe with a remoye player that ends when either someone wins,
-there is a draw, or the remote player leaves the game. NOTE: This function was created
-by Dr. Ogle (not myself), but I made significant changes to it's structure so I have
-included it in my design.
+Initializes a set of game boards and processes any commands receivedfrom other players. These
+commands can include initializing a game of TicTacToe when a player requests one or responding
+to other players moves until a winner is found or the game is a draw. If a player takes too
+long to respond, the game times out and is reset for another player to play. If no player
+responds to the server for a period of time, the server times out and all ongoing games are
+reset for other players to play.
 ```C
 void tictactoe(params...) {
-    /* initialize whose turn it is */
-    while (game not over) {
-        print_board(params...);
-        get_player_choice(params...);   // get move from Player 1 or 2
-        if (ERROR_CODE) return;
-        /* get correct mark for player move */
-        /* determine where to move and update game board */
-        check_win(params...);
-        if (no winner) {
-            /* change to other player's turn */
-        }
-    }
-    print_board(params...); // print final state of game
-    /* determine who won, if anyone */
+    TODO
 }
 ```
+- Gets a command from the remote player and attempts to validate the data and syntax based on
+  the current protocol.
+    ```C
+    int get_command(params...) {
+        /* receive command from remote player */
+        if (error) return ERROR_CODE;
+        /* check version number */
+        if (!valid) return ERROR_CODE;
+        /* check command */
+        if (!valid) return ERROR_CODE;
+        /* check game number */
+        if (!valid) return ERROR_CODE;
+        return (number of bytes received for command);
+    }
+    ```
+    - Handles the NEW_GAME command from the remote player. Initializes a new game, if available,
+      and sends the first move to the remote player.
+        ```C
+        void new_game(params...) {
+            if (there is an open game) {
+                /* register player address to open game */
+                /* initialize the game board */
+                send_p1_move(params...);
+                if (error) {
+                    /* reset game */
+                    return;
+                }
+                /* update and print game board */
+                /* change turn to other player */
+            }
+        }
+        ```
+    - Handles the MOVE command from the remote player. Receives and processes a move from the
+      remote player and sends a move back. If the game has ended from a move, an appropriate
+      message is printed and the game is reset for a new player.
+        ```C
+        void move(params...) {
+            /* get move from remote player */
+            if (player address matches that assigned to game) {
+                /* check that move is valid */
+                if (valid) {
+                    /* update board with Player 2's move */
+                    if (game over) return;
+                    send_p1_move(params...);
+                    if (error) {
+                        /* reset game */
+                        return;
+                    }
+                    /* update board with Player 1's move */
+                    if (game over) return;
+                    /* print board after move exchange */
+                } else {
+                    /* reset game */
+                }
+            }
+        }
+        ```
 - Determines whether or not the given move is valid based on the current state of the game.
     ```C
-    int validate_choice(params...) {
+    int validate_move(params...) {
         if (move not numer [1-9]) return FALSE;
         if (move has already been made) return FALSE;
         return TRUE;
     }
     ```
-- Gets Player 2's next move.
-    ```C
-    int get_p2_choice(params...) {
-        /* throw away datagrams not from player who made the game request */
-        /* receive datagram from current player */
-        if (error) {
-            if (error is timeout) {
-                return ERROR_CODE;
-            } else {
-                return ERROR_CODE;
-            }
-        }
-        /* check that the datagram received from the other player was valid */
-        if (!valid) return ERROR_CODE;
-        return (player2 move);
-    }
-    ```
-- Sends Player 1's move to the remote player. Return the move sent, or an error code if there was
-  an issue sending the move.
+- Sends Player 1's move to the remote player.
     ```C
     int send_p1_move(params...) {
-        /* pack move info into buffer */
-        /* send buffer in datagram to the remote player */
+        /* get move to send to remote player */
+        /* pack move info into datagram */
+        /* send move to remote player */
         if (error) return ERROR_CODE;
-        return move;
+        return (move);
     }
     ```
-- Returns the validated player intput received from either Player 1 or 2. If the input from the host
-  player in invalid, it reprompts until a valid move is made. If the input from the remote player is
-  invalid, an error code is returned instead.
+- Checks if the current game has ended, prints the appropriate message if so, and resets the
+  game for a new player.
     ```C
-    int get_player_choice(params...) {
-        /* get choice from Player 1 or 2 */
-        while (move invalid) {
-            /* reprompt for valid move */
-            if (Player 2) return ERROR_CODE;
-        }
-        if (Player 1) {
-           send_p1_move(params...)
-        }
+    int game_over(params...) {
+        /* check if somebody won */
+        if (winner) /* print winner info */;
+        /* check for draw */
+        if (draw) /* print draw info */;
+        /* check if game still in progress */
+        if (!winner && !draw) return FALSE;
+        /* reset game */
+        return TRUE;
     }
     ```
