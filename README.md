@@ -69,7 +69,7 @@ arguments will need to be enclosed in quotes.
   always send their messages from the same IP address and port number
   used to make the request.
 
-## TicTacToe Player 2
+## TicTacToe Client
 > By: Ben Nagel
 
 ### DESCRIPTION <a name="description-client"></a>
